@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relativistic Black Hole Observatory</title>
+  <style>
+    :root {
+      --bg: #010104;
+      --surface: rgba(8, 10, 20, 0.76);
+      --border: rgba(245, 158, 11, 0.28);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #f59e0b;
+      --accent-2: #ec4899;
+      --glow: rgba(245, 158, 11, 0.35);
+      --redshift-tint: rgba(239, 68, 68, 0);
+      --tidal-skew: 0deg;
+      --tidal-scale: 1;
+      --chromatic-shift: 0px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'Fira Code', 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    #cosmos-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: -2;
+      pointer-events: none;
+    }
+
+    /* Hidden SVG Filter for DOM Tidal Distortion */
+    .svg-filters {
+      position: absolute;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+    }
+
+    /* Relativistic Gravitational Redshift Vignette */
+    .redshift-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 40%, var(--redshift-tint) 100%);
+      transition: background 0.15s ease;
+    }
+
+    /* Fixed Telemetry HUD */
+    .hud-top {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 14px 28px;
+      background: linear-gradient(to bottom, rgba(1, 1, 6, 0.92), rgba(1, 1, 6, 0.45), transparent);
+      backdrop-filter: blur(8px);
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+    }
+
+    .hud-brand {
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
+    .hud-brand span { color: var(--accent); }
+
+    .hud-telemetry {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      color: var(--muted);
+    }
+    .hud-telemetry b { color: var(--accent); font-weight: 600; }
+    .hud-telemetry .earth-clock { color: #38bdf8; }
+    .hud-telemetry .redshift-val { color: #f43f5e; }
+
+    /* Interactive Gravity & Time Dilation Control Bar */
+    .physics-dock {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 20px;
+      background: rgba(8, 10, 22, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      backdrop-filter: blur(14px);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.75);
+    }
+
+    .physics-dock label {
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .physics-dock input[type="range"] {
+      accent-color: var(--accent);
+      width: 110px;
+      cursor: pointer;
+    }
+
+    .physics-btn {
+      background: rgba(245, 158, 11, 0.14);
+      border: 1px solid var(--accent);
+      color: #fde68a;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .physics-btn:hover, .physics-btn.active {
+      background: var(--accent);
+      color: #020308;
+      font-weight: 700;
+      box-shadow: 0 0 16px var(--glow);
+    }
+
+    /* Side Waypoints */
+    .hud-progress {
+      position: fixed;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .orbit-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid var(--muted);
+      background: transparent;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+    .orbit-dot.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 14px var(--accent);
+      transform: scale(1.35);
+    }
+
+    /* Scrollable Singularity Sectors */
+    .sector {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 100px 24px;
+      max-width: 1140px;
+      margin: 0 auto;
+    }
+
+    .sector.align-right { justify-content: flex-end; }
+    .sector.align-center { justify-content: center; text-align: center; }
+
+    .panel {
+      width: 100%;
+      max-width: 550px;
+      background: var(--surface);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 34px;
+      box-shadow:
+        0 24px 70px rgba(0, 0, 0, 0.8),
+        calc(var(--chromatic-shift) * -1) 0 12px rgba(244, 63, 94, 0.25),
+        var(--chromatic-shift) 0 12px rgba(56, 189, 248, 0.25);
+      filter: url(#spacetime-warp);
+      opacity: 0;
+      transform: translateY(35px) skewY(var(--tidal-skew)) scaleY(var(--tidal-scale));
+      transition: opacity 0.7s ease, transform 0.2s ease, border-color 0.3s;
+      will-change: transform, filter;
+      text-align: left;
+    }
+
+    .sector.align-center .panel {
+      text-align: center;
+    }
+
+    .panel.visible {
+      opacity: 1;
+      transform: translateY(0) skewY(var(--tidal-skew)) scaleY(var(--tidal-scale));
+    }
+
+    .panel:hover { border-color: var(--accent); }
+
+    .panel h1, .panel h2 {
+      text-shadow:
+        calc(var(--chromatic-shift) * -1) 0 0 rgba(255, 50, 80, 0.75),
+        var(--chromatic-shift) 0 0 rgba(56, 189, 248, 0.75);
+    }
+
+    .sector-tag {
+      font-family: var(--font-mono);
+      font-size: 0.73rem;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .mass-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.71rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid var(--border);
+      color: #fde68a;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      font-size: clamp(2.3rem, 5vw, 3.4rem);
+      line-height: 1.1;
+      margin-bottom: 14px;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      font-size: 1.95rem;
+      margin-bottom: 12px;
+    }
+
+    p {
+      color: var(--muted);
+      margin-bottom: 18px;
+      font-size: 0.95rem;
+    }
+
+    .glow-text {
+      background: linear-gradient(90deg, #fde68a, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Astrophysical Telemetry Stat Grid */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .stat-box {
+      padding: 11px 14px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .stat-box span {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .stat-box strong {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      color: #fde68a;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #020308;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 24px var(--glow);
+    }
+
+    .project-item {
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .project-item:hover {
+      border-color: var(--accent);
+      transform: translateX(6px);
+    }
+    .project-item h4 {
+      font-size: 1.02rem;
+      margin-bottom: 3px;
+      color: var(--text);
+    }
+    .project-item span {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--accent);
+    }
+
+    .skills-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .skill-chip {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 6px 11px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(245, 158, 11, 0.08);
+      color: var(--text);
+    }
+
+    .comms-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .comms-form select, .comms-form input {
+      width: 100%;
+      padding: 11px 14px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      outline: none;
+    }
+    .comms-form select:focus, .comms-form input:focus {
+      border-color: var(--accent);
+    }
+
+    .probe-log {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(2, 6, 23, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: #bae6fd;
+      line-height: 1.5;
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      .hud-telemetry { gap: 10px; font-size: 0.7rem; }
+      .hud-progress { right: 10px; }
+      .sector { justify-content: center !important; }
+      .physics-dock { width: 94vw; justify-content: center; flex-wrap: wrap; border-radius: 16px; }
+      .telemetry-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SVG Displacement Filter for UI Panel Tidal Distortion -->
+  <svg class="svg-filters" aria-hidden="true">
+    <defs>
+      <filter id="spacetime-warp" x="-15%" y="-15%" width="130%" height="130%">
+        <feTurbulence
+          id="warp-turbulence"
+          type="fractalNoise"
+          baseFrequency="0.012 0.035"
+          numOctaves="2"
+          seed="4"
+          result="noise"
+        />
+        <feDisplacementMap
+          id="warp-displacement"
+          in="SourceGraphic"
+          in2="noise"
+          scale="0"
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </defs>
+  </svg>
+
+  <canvas id="cosmos-canvas"></canvas>
+  <div class="redshift-overlay"></div>
+
+  <!-- Fixed Singularity & General Relativity Telemetry HUD -->
+  <header class="hud-top">
+    <div class="hud-brand">BLACKHOLE<span>::</span>SIMULATION</div>
+    <div class="hud-telemetry">
+      <span>SINGULARITY: <b id="hud-bh">CYGNUS X-1</b></span>
+      <span>MASS: <b id="hud-mass">21.2 M☉</b></span>
+      <span>PROPER TIME (τ): <b id="hud-ship-time">00:00.0s</b></span>
+      <span>EARTH TIME (t): <b class="earth-clock" id="hud-earth-time">+0.0s</b></span>
+      <span>LORENTZ (γ): <b id="hud-dilation">1.08x</b></span>
+      <span>REDSHIFT (z): <b class="redshift-val" id="hud-redshift">0.08</b></span>
+    </div>
+  </header>
+
+  <!-- Interactive Gravity & Spacetime Controls -->
+  <div class="physics-dock">
+    <label title="Approach the Schwarzschild radius (Rs) to intensify time dilation and gravitational lensing">
+      HORIZON PROXIMITY (r/R<sub>s</sub>):
+      <input type="range" id="proximity-slider" min="1.02" max="3.00" step="0.01" value="1.65" />
+      <b id="proximity-label" style="color: var(--accent);">1.65 R<sub>s</sub></b>
+    </label>
+    <button class="physics-btn active" id="distortion-toggle">🌀 LENSING DISTORTION: ON</button>
+    <button class="physics-btn active" id="grid-toggle">🌐 METRIC GRID: ON</button>
+  </div>
+
+  <!-- Side Waypoints -->
+  <nav class="hud-progress" aria-label="Black Hole Sectors">
+    <a href="#sector-1" class="orbit-dot active" data-target="sector-1" title="Cygnus X-1 — Stellar-Mass X-Ray Binary"></a>
+    <a href="#sector-2" class="orbit-dot" data-target="sector-2" title="Sagittarius A* — Milky Way Galactic Core"></a>
+    <a href="#sector-3" class="orbit-dot" data-target="sector-3" title="M87* — Virgo Supercluster Core"></a>
+    <a href="#sector-4" class="orbit-dot" data-target="sector-4" title="TON 618 — Hyperluminous Quasar"></a>
+    <a href="#sector-5" class="orbit-dot" data-target="sector-5" title="Phoenix A* — Stupendously Large Black Hole"></a>
+  </nav>
+
+  <!-- Sector 1: Cygnus X-1 -->
+  <section class="sector align-center" id="sector-1" data-bh="CYGNUS X-1" data-mass="21.2 M☉">
+    <div class="panel visible">
+      <span class="sector-tag">// SECTOR 01 — STELLAR-MASS HIGH-MASS X-RAY BINARY</span>
+      <span class="mass-badge">CYGNUS X-1 • 21.2 M☉ • R<sub>s</sub> ≈ 62.6 KM • KERR SPIN a* &gt; 0.998</span>
+      <h1>Cygnus <span class="glow-text">X-1</span></h1>
+      <p>
+        Detected in 1964 via suborbital X-ray sounding rockets and famous for the 1974 wager between Stephen Hawking and Kip Thorne, Cygnus X-1 was humanity's first confirmed black hole. Orbiting at just 0.2 AU from the blue supergiant star <b>HDE 226868</b>, it strips stellar wind into a 10-million-kelvin accretion disk spinning near the extremal Kerr limit.
+      </p>
+      <div class="telemetry-grid">
+        <div class="stat-box">
+          <span>Distance from Earth</span>
+          <strong>7,340 Light-Years</strong>
+        </div>
+        <div class="stat-box">
+          <span>Schwarzschild Radius</span>
+          <strong>62.6 Kilometers</strong>
+        </div>
+        <div class="stat-box">
+          <span>Binary Orbital Period</span>
+          <strong>5.5998 Days</strong>
+        </div>
+        <div class="stat-box">
+          <span>Tidal Gravity at Horizon</span>
+          <strong>~7.1 × 10¹⁰ m/s²</strong>
+        </div>
+      </div>
+      <a href="#sector-2" class="btn">Warp to Sagittarius A* ↓</a>
+    </div>
+  </section>
+
+  <!-- Sector 2: Sagittarius A* -->
+  <section class="sector" id="sector-2" data-bh="SAGITTARIUS A*" data-mass="4.3 × 10⁶ M☉">
+    <div class="panel">
+      <span class="sector-tag">// SECTOR 02 — MILKY WAY GALACTIC CENTER</span>
+      <span class="mass-badge">SAGITTARIUS A* • 4.30 MILLION M☉ • R<sub>s</sub> ≈ 12.7 MILLION KM</span>
+      <h2>Sagittarius <span class="glow-text">A*</span></h2>
+      <p>
+        Anchoring the dynamical heart of our Milky Way galaxy in the constellation Sagittarius, Sgr A* was proven to be a supermassive singularity by tracking the extreme Keplerian orbits of the <b>S-star cluster</b>—earning Reinhard Genzel and Andrea Ghez the 2020 Nobel Prize in Physics before the Event Horizon Telescope directly resolved its glowing shadow in 2022.
+      </p>
+      <div class="telemetry-grid">
+        <div class="stat-box">
+          <span>Galactic Distance</span>
+          <strong>26,670 Light-Years</strong>
+        </div>
+        <div class="stat-box">
+          <span>Event Horizon Diameter</span>
+          <strong>25.4 Million km (0.17 AU)</strong>
+        </div>
+        <div class="stat-box">
+          <span>Star S2 Pericenter Speed</span>
+          <strong>7,650 km/s (2.55% c)</strong>
+        </div>
+        <div class="stat-box">
+          <span>EHT Ring Angular Size</span>
+          <strong>51.8 Microarcseconds</strong>
+        </div>
+      </div>
+      <p style="margin-bottom: 0; font-size: 0.85rem;">
+        Because Sgr A* accretes via a radiatively inefficient advection-dominated flow (RIAF), its plasma flares shift rapidly on timescales of minutes.
+      </p>
+    </div>
+  </section>
+
+  <!-- Sector 3: M87* -->
+  <section class="sector align-right" id="sector-3" data-bh="M87*" data-mass="6.5 × 10⁹ M☉">
+    <div class="panel">
+      <span class="sector-tag">// SECTOR 03 — VIRGO SUPERCLUSTER CORE</span>
+      <span class="mass-badge">MESSIER 87* • 6.5 BILLION M☉ • R<sub>s</sub> ≈ 19.2 BILLION KM (128 AU)</span>
+      <h2>Messier <span class="glow-text">87*</span></h2>
+      <p>
+        Located 53.5 million light-years away at the core of the supergiant elliptical galaxy Messier 87, M87* became the first black hole in history to have its shadow directly imaged by the Event Horizon Telescope in April 2019.
+      </p>
+      <div class="project-item">
+        <span>01 // 230 GHz VLBI INTERFEROMETRY</span>
+        <h4>Relativistic Doppler Beaming Crescent</h4>
+        <p style="margin: 4px 0 0; font-size: 0.84rem;">Plasma orbiting clockwise at ~0.5c beams intense synchrotron photons toward Earth on the southern rim of the 42-microarcsecond ring.</p>
+      </div>
+      <div class="project-item">
+        <span>02 // BLANDFORD–ZNAJEK MAGNETOSPHERE</span>
+        <h4>5,000-Light-Year Relativistic Jet</h4>
+        <p style="margin: 4px 0 0; font-size: 0.84rem;">Ergospheric frame-dragging twists helical magnetic fields, collimating a superluminal plasma jet that escapes the host galaxy.</p>
+      </div>
+      <div class="project-item">
+        <span>03 // SOLAR SYSTEM SCALE COMPARISON</span>
+        <h4>256 AU Shadow Diameter</h4>
+        <p style="margin: 4px 0 0; font-size: 0.84rem;">Its event horizon spans more than three times Pluto's orbital diameter and swallows ~0.1 solar masses per year.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sector 4: TON 618 -->
+  <section class="sector" id="sector-4" data-bh="TON 618" data-mass="6.6 × 10¹⁰ M☉">
+    <div class="panel">
+      <span class="sector-tag">// SECTOR 04 — HYPERLUMINOUS LYMAN-ALPHA QUASAR</span>
+      <span class="mass-badge">TON 618 • 66 BILLION M☉ • R<sub>s</sub> ≈ 195 BILLION KM (1,300 AU)</span>
+      <h2>TON <span class="glow-text">618</span></h2>
+      <p>
+        Observed at a cosmological redshift of <b>z = 2.219</b> (10.4 billion years of light-travel time near the Canes Venatici–Coma Berenices border), TON 618 powers one of the brightest quasars in the known universe. Its super-heated accretion disk shines with the bolometric luminosity of <b>140 trillion Suns</b>, outshining its entire host galaxy and ionizing a 320,000-light-year Lyman-alpha nebula.
+      </p>
+      <div class="skills-wrap">
+        <span class="skill-chip">Abs. Magnitude: -30.7</span>
+        <span class="skill-chip">Luminosity: 1.4 × 10¹⁴ L☉</span>
+        <span class="skill-chip">Power: 5.4 × 10⁴⁰ Watts</span>
+        <span class="skill-chip">Horizon Diameter: 2,600 AU</span>
+        <span class="skill-chip">Hβ Line Width: 7,000 km/s</span>
+        <span class="skill-chip">Light-Travel Dist: 10.4 Gly</span>
+        <span class="skill-chip">Lyman-α Blob: 100 kpc</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sector 5: Phoenix A* -->
+  <section class="sector align-right" id="sector-5" data-bh="PHOENIX A*" data-mass="1.0 × 10¹¹ M☉">
+    <div class="panel">
+      <span class="sector-tag">// SECTOR 05 — STUPENDOUSLY LARGE BLACK HOLE (SLAB)</span>
+      <span class="mass-badge">PHOENIX A* • 100 BILLION M☉ • R<sub>s</sub> ≈ 295 BILLION KM (1,975 AU)</span>
+      <h2>Phoenix <span class="glow-text">A*</span></h2>
+      <p>
+        Reigning at the core of the Phoenix Cluster 5.8 billion light-years away, Phoenix A* is the most massive singularity ever discovered (~100 billion M☉). A photon orbiting its photon sphere takes <b>22 days and 19 hours</b> to complete a single lap. Because tidal forces scale inversely with mass squared ($M^{-2}$) at the horizon, an astronaut crossing Phoenix A*'s event horizon feels virtually zero spaghettification.
+      </p>
+      <form class="comms-form" id="comms-form">
+        <input type="text" id="probe-callsign" placeholder="Probe Callsign (e.g., PENROSE-09)" value="HORIZON-PROBE-01" required />
+        <select id="probe-trajectory">
+          <option value="geodesic">Radial Free-Fall Geodesic (r → 1.00 Rs)</option>
+          <option value="isco">Innermost Stable Circular Orbit (r = 3.00 Rs)</option>
+          <option value="photon">Photon Sphere Grazing Flyby (r = 1.50 Rs)</option>
+        </select>
+        <button type="submit" class="btn" id="send-btn">Deploy Infalling Telemetry Probe</button>
+      </form>
+      <div class="probe-log" id="probe-log"></div>
+    </div>
+  </section>
+
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // 1. UI & Sector Observer
+    const sectors = document.querySelectorAll('.sector');
+    const dots = document.querySelectorAll('.orbit-dot');
+    const hudBh = document.getElementById('hud-bh');
+    const hudMass = document.getElementById('hud-mass');
+    const hudDilation = document.getElementById('hud-dilation');
+    const hudRedshift = document.getElementById('hud-redshift');
+    const hudShipTime = document.getElementById('hud-ship-time');
+    const hudEarthTime = document.getElementById('hud-earth-time');
+    const proximitySlider = document.getElementById('proximity-slider');
+    const proximityLabel = document.getElementById('proximity-label');
+    const gridToggle = document.getElementById('grid-toggle');
+    const distortionToggle = document.getElementById('distortion-toggle');
+    const warpDisplacement = document.getElementById('warp-displacement');
+    const warpTurbulence = document.getElementById('warp-turbulence');
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const panel = entry.target.querySelector('.panel');
+          if (panel) panel.classList.add('visible');
+          hudBh.textContent = entry.target.dataset.bh;
+          hudMass.textContent = entry.target.dataset.mass;
+          dots.forEach(d => d.classList.toggle('active', d.dataset.target === entry.target.id));
+        }
+      });
+    }, { threshold: 0.45 });
+
+    sectors.forEach(s => observer.observe(s));
+
+    // Interactive Phoenix A* Probe Deployment Telemetry
+    document.getElementById('comms-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('send-btn');
+      const callsign = document.getElementById('probe-callsign').value.trim() || 'HORIZON-PROBE-01';
+      const trajectory = document.getElementById('probe-trajectory').value;
+      const logBox = document.getElementById('probe-log');
+
+      // Pulse proximity toward the event horizon briefly
+      proximitySlider.value = trajectory === 'geodesic' ? '1.04' : trajectory === 'photon' ? '1.50' : '2.10';
+      proximitySlider.dispatchEvent(new Event('input'));
+
+      const trajectoryMetrics = {
+        geodesic: {
+          rText: '1.00 Rs (295.3 Billion km)',
+          tidal: '1.38 × 10⁻¹³ g (No Spaghettification — Peaceful Horizon Crossing)',
+          hawking: '6.17 × 10⁻¹⁹ Kelvin',
+          evap: '2.09 × 10¹⁰⁰ Years'
+        },
+        isco: {
+          rText: '3.00 Rs (885.9 Billion km)',
+          tidal: '5.11 × 10⁻¹⁵ g (Stable Relativistic Orbit at v = 0.5c)',
+          hawking: '6.17 × 10⁻¹⁹ Kelvin',
+          evap: '2.09 × 10¹⁰⁰ Years'
+        },
+        photon: {
+          rText: '1.50 Rs (443.0 Billion km)',
+          tidal: '4.09 × 10⁻¹⁴ g (Null Geodesic Light-Ring Skim)',
+          hawking: '6.17 × 10⁻¹⁹ Kelvin',
+          evap: '2.09 × 10¹⁰⁰ Years'
+        }
+      };
+
+      const m = trajectoryMetrics[trajectory];
+      logBox.style.display = 'block';
+      logBox.innerHTML = `
+        <b>[TELEMETRY LOCKED :: ${callsign.toUpperCase()}]</b><br/>
+        • Target Radius: <b>${m.rText}</b><br/>
+        • 2m Hull Tidal Differential: <b>${m.tidal}</b><br/>
+        • Hawking Temperature (T<sub>H</sub>): <b>${m.hawking}</b><br/>
+        • Complete Evaporation Lifespan: <b>${m.evap}</b>
+      `;
+
+      btn.textContent = 'Telemetry Stream Active ✓';
+      setTimeout(() => { btn.textContent = 'Deploy Infalling Telemetry Probe'; }, 3000);
+    });
+
+    // 2. Three.js Relativistic Engine & Render Target for Screen-Space Distortion
+    const canvas = document.getElementById('cosmos-canvas');
+    const pixelRatio = Math.min(window.devicePixelRatio, 2);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Offscreen RenderTarget for full-screen gravitational lensing post-processing
+    let renderTarget = new THREE.WebGLRenderTarget(
+      window.innerWidth * pixelRatio,
+      window.innerHeight * pixelRatio,
+      { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
+    );
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x010104);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+    // Accretion Disk Shader (Seamless Periodic Coordinates + Relativistic Doppler Beaming)
+    const diskVertexShader = `
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        vUv = uv;
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+
+    const diskFragmentShader = `
+      uniform float uTime;
+      uniform float uRedshiftFactor;
+      uniform vec3 uColorInner;
+      uniform vec3 uColorOuter;
+      varying vec2 vUv;
+      varying vec3 vPos;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i + vec2(0.0,0.0)), hash(i + vec2(1.0,0.0)), u.x),
+                   mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), u.x), u.y);
+      }
+
+      void main() {
+        float r = vUv.x;
+        float angle = atan(vPos.y, vPos.x);
+        float speed = uTime * (2.8 / (r + 0.35));
+        float swirl = angle * 3.0 - speed;
+
+        vec2 periodicCoord1 = vec2(cos(swirl) * 2.5 + r * 14.0, sin(swirl) * 2.5 + r * 14.0);
+        vec2 periodicCoord2 = vec2(cos(angle * 6.0 + speed * 0.5) * 4.0, sin(angle * 6.0 + speed * 0.5) * 4.0) + r * 28.0 - uTime * 0.8;
+
+        float n1 = noise(periodicCoord1);
+        float n2 = noise(periodicCoord2);
+        float plasma = n1 * 0.65 + n2 * 0.35;
+
+        float radialFade = smoothstep(0.0, 0.08, r) * (1.0 - smoothstep(0.45, 1.0, r));
+        float doppler = 0.82 + 0.34 * cos(angle + 0.5);
+
+        vec3 col = mix(uColorInner, uColorOuter, pow(r, 0.65));
+        col *= (0.7 + plasma * 1.1) * doppler;
+        col += uColorInner * smoothstep(0.18, 0.0, r) * 1.4;
+
+        col = mix(col, vec3(1.0, 0.18, 0.08) * length(col), uRedshiftFactor * 0.55);
+
+        float alpha = radialFade * (0.45 + plasma * 0.65);
+        gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
+      }
+    `;
+
+    // Photon Sphere Halo Shader
+    const haloVertexShader = `
+      varying vec3 vNormal;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+
+    const haloFragmentShader = `
+      uniform vec3 uGlowColor;
+      varying vec3 vNormal;
+      void main() {
+        float viewDot = abs(dot(vNormal, vec3(0.0, 0.0, 1.0)));
+        float photonRing = pow(1.0 - viewDot, 4.5) * 1.85;
+        gl_FragColor = vec4(uGlowColor * photonRing, photonRing);
+      }
+    `;
+
+    // 3D Warped Spacetime Metric Grid Shader
+    const metricGridVertexShader = `
+      uniform float uTime;
+      uniform float uMassWell;
+      uniform vec2 uMouseOffset;
+      varying float vDepth;
+      varying float vRadius;
+
+      void main() {
+        vec3 pos = position;
+        vec2 rel = pos.xy - uMouseOffset;
+        float r = length(pos.xy);
+        float rMouse = length(rel);
+
+        float funnel = -uMassWell / sqrt(r * r + 1.35);
+        float cursorWell = -0.85 / sqrt(rMouse * rMouse + 0.8);
+        float ripple = sin(r * 2.2 - uTime * 3.5) * 0.14 / (1.0 + r * 0.25);
+
+        pos.z += funnel + cursorWell + ripple;
+        vDepth = clamp((-funnel) / uMassWell, 0.0, 1.0);
+        vRadius = r;
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `;
+
+    const metricGridFragmentShader = `
+      uniform vec3 uAccentColor;
+      varying float vDepth;
+      varying float vRadius;
+
+      void main() {
+        float edgeFade = 1.0 - smoothstep(8.0, 14.5, vRadius);
+        vec3 farColor = vec3(0.12, 0.45, 0.75);
+        vec3 wellColor = uAccentColor;
+        vec3 col = mix(farColor, wellColor, clamp(vDepth * 1.6, 0.0, 1.0));
+        gl_FragColor = vec4(col, edgeFade * (0.22 + vDepth * 0.55));
+      }
+    `;
+
+    function makeMappedRingGeo(innerR, outerR) {
+      const geo = new THREE.RingGeometry(innerR, outerR, 128, 1);
+      const pos = geo.attributes.position;
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < pos.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+        const u = (v.length() - innerR) / (outerR - innerR);
+        uv.setXY(i, u, 0.5);
+      }
+      return geo;
+    }
+
+    const metricGrids = [];
+
+    function createBlackHole(cfg) {
+      const group = new THREE.Group();
+
+      const horizon = new THREE.Mesh(
+        new THREE.SphereGeometry(cfg.radius, 64, 64),
+        new THREE.MeshBasicMaterial({ color: 0x000000 })
+      );
+      group.add(horizon);
+
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(cfg.radius * 1.22, 64, 64),
+        new THREE.ShaderMaterial({
+          uniforms: { uGlowColor: { value: new THREE.Color(cfg.innerColor) } },
+          vertexShader: haloVertexShader,
+          fragmentShader: haloFragmentShader,
+          blending: THREE.AdditiveBlending,
+          side: THREE.BackSide,
+          transparent: true,
+          depthWrite: false
+        })
+      );
+      group.add(halo);
+
+      const diskMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: Math.random() * 10 },
+          uRedshiftFactor: { value: 0.0 },
+          uColorInner: { value: new THREE.Color(cfg.innerColor) },
+          uColorOuter: { value: new THREE.Color(cfg.outerColor) }
+        },
+        vertexShader: diskVertexShader,
+        fragmentShader: diskFragmentShader,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        transparent: true,
+        depthWrite: false
+      });
+
+      const mainDisk = new THREE.Mesh(
+        makeMappedRingGeo(cfg.radius * 1.25, cfg.radius * cfg.diskScale),
+        diskMat
+      );
+      mainDisk.rotation.x = Math.PI / 2 - 0.22;
+      group.add(mainDisk);
+
+      const lensedArch = new THREE.Mesh(
+        makeMappedRingGeo(cfg.radius * 1.12, cfg.radius * (cfg.diskScale * 0.62)),
+        diskMat
+      );
+      lensedArch.rotation.x = -0.18;
+      group.add(lensedArch);
+
+      const gridGeo = new THREE.PlaneGeometry(28, 28, 56, 56);
+      const gridMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uMassWell: { value: cfg.radius * 3.4 },
+          uMouseOffset: { value: new THREE.Vector2(0, 0) },
+          uAccentColor: { value: new THREE.Color(cfg.outerColor) }
+        },
+        vertexShader: metricGridVertexShader,
+        fragmentShader: metricGridFragmentShader,
+        wireframe: true,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const metricGrid = new THREE.Mesh(gridGeo, gridMat);
+      metricGrid.rotation.x = Math.PI / 2;
+      metricGrid.position.y = -cfg.radius * 0.85;
+      group.add(metricGrid);
+      metricGrids.push(metricGrid);
+
+      if (cfg.hasJets) {
+        const jetGeo = new THREE.ConeGeometry(cfg.radius * 0.45, cfg.jetLength, 32, 1, true);
+        const jetMat = new THREE.ShaderMaterial({
+          uniforms: { uColor: { value: new THREE.Color(cfg.jetColor || cfg.innerColor) } },
+          vertexShader: `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            uniform vec3 uColor;
+            varying vec2 vUv;
+            void main() {
+              float core = sin(vUv.x * 3.14159);
+              float fade = pow(1.0 - vUv.y, 1.8);
+              gl_FragColor = vec4(uColor, core * fade * 0.55);
+            }
+          `,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide,
+          transparent: true,
+          depthWrite: false
+        });
+
+        const topJet = new THREE.Mesh(jetGeo, jetMat);
+        topJet.position.y = cfg.jetLength / 2;
+        group.add(topJet);
+
+        const bottomJet = new THREE.Mesh(jetGeo, jetMat);
+        bottomJet.rotation.x = Math.PI;
+        bottomJet.position.y = -cfg.jetLength / 2;
+        group.add(bottomJet);
+      }
+
+      group.rotation.z = THREE.MathUtils.degToRad(cfg.tilt);
+      group.userData = { diskMat, gridMat, baseMassWell: cfg.radius * 3.4, radius: cfg.radius };
+      return group;
+    }
+
+    const spacing = 32;
+    const blackHoleConfigs = [
+      { radius: 1.4, diskScale: 3.4, innerColor: 0xe0f2fe, outerColor: 0x0284c7, tilt: 18, hasJets: false },
+      { radius: 1.85, diskScale: 3.3, innerColor: 0xfef3c7, outerColor: 0xd97706, tilt: -14, hasJets: false },
+      { radius: 2.1, diskScale: 3.5, innerColor: 0xffedd5, outerColor: 0xea580c, tilt: 24, hasJets: true, jetLength: 16, jetColor: 0x60a5fa },
+      { radius: 2.5, diskScale: 3.8, innerColor: 0xffffff, outerColor: 0x8b5cf6, tilt: -20, hasJets: true, jetLength: 26, jetColor: 0xc4b5fd },
+      { radius: 3.1, diskScale: 3.9, innerColor: 0xfce7f3, outerColor: 0xe11d48, tilt: 12, hasJets: true, jetLength: 22, jetColor: 0xf43f5e }
+    ];
+
+    const bhGroups = blackHoleConfigs.map((cfg, idx) => {
+      const g = createBlackHole(cfg);
+      g.position.set(0, 0, -idx * spacing);
+      scene.add(g);
+      return g;
+    });
+
+    // 3. Gravitationally Lensed Starfield
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 3800;
+    const starPos = new Float32Array(starCount * 3);
+    const starSize = new Float32Array(starCount);
+    for (let i = 0; i < starCount; i++) {
+      starPos[i * 3] = (Math.random() - 0.5) * 180;
+      starPos[i * 3 + 1] = (Math.random() - 0.5) * 180;
+      starPos[i * 3 + 2] = 20 - Math.random() * (spacing * 5 + 60);
+      starSize[i] = Math.random() * 1.8 + 0.6;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    starGeo.setAttribute('aSize', new THREE.BufferAttribute(starSize, 1));
+
+    const lensedStarMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uBhWorldPos: { value: new THREE.Vector3(0, 0, 0) },
+        uEinsteinRadius: { value: 2.6 }
+      },
+      vertexShader: `
+        uniform vec3 uBhWorldPos;
+        uniform float uEinsteinRadius;
+        attribute float aSize;
+        varying float vLensedBoost;
+
+        void main() {
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vec4 bhViewPos = viewMatrix * vec4(uBhWorldPos, 1.0);
+
+          vLensedBoost = 0.0;
+
+          if (mvPosition.z < bhViewPos.z + 6.0) {
+            vec2 impactVec = mvPosition.xy - bhViewPos.xy;
+            float b = length(impactVec);
+            float deflection = (uEinsteinRadius * uEinsteinRadius) / max(b, 0.35);
+            mvPosition.xy += normalize(impactVec + vec2(0.0001)) * deflection;
+            vLensedBoost = clamp(deflection / 2.2, 0.0, 1.0);
+          }
+
+          gl_PointSize = aSize * (260.0 / -mvPosition.z) * (1.0 + vLensedBoost * 1.4);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vLensedBoost;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          vec3 baseCol = vec3(0.92, 0.96, 1.0);
+          vec3 lensedCol = vec3(1.0, 0.85, 0.55);
+          vec3 col = mix(baseCol, lensedCol, vLensedBoost);
+          float alpha = smoothstep(0.5, 0.1, d) * (0.8 + vLensedBoost * 0.2);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    scene.add(new THREE.Points(starGeo, lensedStarMat));
+
+    // 4. Full-Screen Relativistic Gravitational Lensing Post-Processing Pass
+    const postScene = new THREE.Scene();
+    const postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+    const lensingPostMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: renderTarget.texture },
+        uBhScreenPos: { value: new THREE.Vector2(0.5, 0.5) },
+        uMouseUv: { value: new THREE.Vector2(0.5, 0.5) },
+        uAspect: { value: window.innerWidth / window.innerHeight },
+        uDistortionStrength: { value: 1.0 },
+        uDangerLevel: { value: 0.0 },
+        uScreenRadius: { value: 0.12 },
+        uTime: { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 uBhScreenPos;
+        uniform vec2 uMouseUv;
+        uniform float uAspect;
+        uniform float uDistortionStrength;
+        uniform float uDangerLevel;
+        uniform float uScreenRadius;
+        uniform float uTime;
+        varying vec2 vUv;
+
+        void main() {
+          if (uDistortionStrength < 0.01) {
+            gl_FragColor = texture2D(tDiffuse, vUv);
+            return;
+          }
+
+          vec2 delta = vUv - uBhScreenPos;
+          vec2 aspectDelta = vec2(delta.x * uAspect, delta.y);
+          float dist = length(aspectDelta);
+          vec2 dir = aspectDelta / max(dist, 0.0001);
+
+          float einsteinR = uScreenRadius * (0.85 + uDangerLevel * 0.75) * uDistortionStrength;
+          float ripple = sin(dist * 38.0 - uTime * 5.0) * 0.0025 * (0.3 + uDangerLevel) / (1.0 + dist * 6.0);
+          float pull = (einsteinR * einsteinR) / (dist * dist + 0.0065) + ripple;
+
+          vec2 mouseDelta = vUv - uMouseUv;
+          vec2 aspectMouse = vec2(mouseDelta.x * uAspect, mouseDelta.y);
+          float mDist = length(aspectMouse);
+          vec2 mDir = aspectMouse / max(mDist, 0.0001);
+          float mouseLens = 0.0012 / (mDist * mDist + 0.018);
+
+          vec2 totalOffset = dir * pull + mDir * mouseLens;
+          totalOffset.x /= uAspect;
+
+          float chroma = pull * (0.14 + uDangerLevel * 0.28);
+          vec2 uvR = clamp(vUv - totalOffset * (1.0 + chroma), 0.001, 0.999);
+          vec2 uvG = clamp(vUv - totalOffset, 0.001, 0.999);
+          vec2 uvB = clamp(vUv - totalOffset * (1.0 - chroma), 0.001, 0.999);
+
+          float r = texture2D(tDiffuse, uvR).r;
+          float g = texture2D(tDiffuse, uvG).g;
+          float b = texture2D(tDiffuse, uvB).b;
+          vec3 col = vec3(r, g, b);
+
+          float ringGlow = exp(-pow((dist - einsteinR * 1.15) / 0.018, 2.0)) * (0.22 + uDangerLevel * 0.35);
+          col += vec3(1.0, 0.78, 0.42) * ringGlow;
+
+          float horizonMask = smoothstep(uScreenRadius * 0.52, uScreenRadius * 0.72, dist);
+          col *= horizonMask;
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `
+    });
+
+    postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), lensingPostMat));
+
+    // 5. Interactive Controls & Scroll State
+    let scrollProgress = 0;
+    let smoothScroll = 0;
+    let mouseX = 0, mouseY = 0;
+    let mouseUvX = 0.5, mouseUvY = 0.5;
+    let rOverRs = parseFloat(proximitySlider.value);
+    let distortionEnabled = true;
+
+    proximitySlider.addEventListener('input', (e) => {
+      rOverRs = parseFloat(e.target.value);
+      proximityLabel.innerHTML = `${rOverRs.toFixed(2)} R<sub>s</sub>`;
+    });
+
+    distortionToggle.addEventListener('click', () => {
+      distortionEnabled = !distortionEnabled;
+      distortionToggle.classList.toggle('active', distortionEnabled);
+      distortionToggle.textContent = distortionEnabled
+        ? '🌀 LENSING DISTORTION: ON'
+        : '🌀 LENSING DISTORTION: OFF';
+      if (!distortionEnabled) {
+        warpDisplacement.setAttribute('scale', '0');
+        document.documentElement.style.setProperty('--chromatic-shift', '0px');
+      }
+    });
+
+    let showMetricGrid = true;
+    gridToggle.addEventListener('click', () => {
+      showMetricGrid = !showMetricGrid;
+      gridToggle.classList.toggle('active', showMetricGrid);
+      gridToggle.textContent = showMetricGrid ? '🌐 METRIC GRID: ON' : '🌐 METRIC GRID: OFF';
+      metricGrids.forEach(g => g.visible = showMetricGrid);
+    });
+
+    window.addEventListener('scroll', () => {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      scrollProgress = maxScroll > 0 ? window.scrollY / maxScroll : 0;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      mouseX = (e.clientX / window.innerWidth - 0.5) * 1.8;
+      mouseY = (e.clientY / window.innerHeight - 0.5) * 1.2;
+      mouseUvX = e.clientX / window.innerWidth;
+      mouseUvY = 1.0 - (e.clientY / window.innerHeight);
+    });
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      renderTarget.setSize(w * pixelRatio, h * pixelRatio);
+      lensingPostMat.uniforms.uAspect.value = w / h;
+    });
+
+    // 6. General Relativity Physics & Render Loop
+    let shipProperTime = 0;
+    let earthCoordTime = 0;
+    let lastFrameTime = performance.now();
+    const projectedBhPos = new THREE.Vector3();
+
+    function formatTime(sec) {
+      if (sec < 60) return `${sec.toFixed(1)}s`;
+      if (sec < 3600) return `${(sec / 60).toFixed(1)}m`;
+      if (sec < 86400) return `${(sec / 3600).toFixed(1)}h`;
+      return `${(sec / 86400).toFixed(2)}d`;
+    }
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min((now - lastFrameTime) / 1000, 0.1);
+      lastFrameTime = now;
+
+      smoothScroll += (scrollProgress - smoothScroll) * 0.06;
+
+      const activeFloatIdx = smoothScroll * 4;
+      const nearestIdx = Math.min(4, Math.max(0, Math.round(activeFloatIdx)));
+      const activeBh = bhGroups[nearestIdx];
+
+      const scrollGravityBoost = smoothScroll * 0.35;
+      const effectiveRatio = Math.max(1.015, rOverRs - scrollGravityBoost);
+
+      const invSqrt = 1 / Math.sqrt(1 - (1 / effectiveRatio));
+      const redshiftZ = invSqrt - 1;
+
+      const properDt = dt / invSqrt;
+      const earthDt = dt * invSqrt * (1 + smoothScroll * 18);
+      shipProperTime += properDt;
+      earthCoordTime += earthDt;
+
+      hudShipTime.textContent = formatTime(shipProperTime);
+      hudEarthTime.textContent = `+${formatTime(earthCoordTime)}`;
+      hudDilation.textContent = `${invSqrt.toFixed(2)}x`;
+      hudRedshift.textContent = redshiftZ.toFixed(2);
+
+      // Tidal Distortion & Redshift Intensity
+      const dangerLevel = Math.min(1, Math.max(0, (invSqrt - 1.15) / 3.8));
+      document.documentElement.style.setProperty('--redshift-tint', `rgba(239, 68, 68, ${(dangerLevel * 0.45).toFixed(3)})`);
+      document.documentElement.style.setProperty('--tidal-skew', `${(dangerLevel * 3.2 * mouseX).toFixed(2)}deg`);
+      document.documentElement.style.setProperty('--tidal-scale', `${(1 + dangerLevel * 0.08).toFixed(3)}`);
+
+      if (distortionEnabled) {
+        const svgScale = (2.5 + dangerLevel * 22.0).toFixed(1);
+        warpDisplacement.setAttribute('scale', svgScale);
+        const freqX = (0.01 + Math.sin(now * 0.0015) * 0.004).toFixed(4);
+        const freqY = (0.03 + Math.cos(now * 0.0012) * 0.008).toFixed(4);
+        warpTurbulence.setAttribute('baseFrequency', `${freqX} ${freqY}`);
+        document.documentElement.style.setProperty('--chromatic-shift', `${(0.8 + dangerLevel * 4.5).toFixed(2)}px`);
+      }
+
+      // Camera FOV and Position
+      const targetFov = 45 + dangerLevel * 24;
+      camera.fov += (targetFov - camera.fov) * 0.1;
+      camera.updateProjectionMatrix();
+
+      const targetZ = -smoothScroll * (spacing * 4);
+      const orbitSwing = Math.sin(smoothScroll * Math.PI * 4) * 3.8;
+      const proximityZoom = 6.2 + (effectiveRatio - 1.0) * 3.2;
+
+      camera.position.x = orbitSwing + mouseX * 1.8;
+      camera.position.y = 1.4 - mouseY * 1.4;
+      camera.position.z = targetZ + proximityZoom;
+      camera.lookAt(0, 0, targetZ - 2);
+      camera.updateMatrixWorld();
+
+      // Project Active Black Hole 3D World Position into 2D Screen UV Space [0, 1]
+      projectedBhPos.copy(activeBh.position).project(camera);
+      const bhScreenU = (projectedBhPos.x + 1) * 0.5;
+      const bhScreenV = (projectedBhPos.y + 1) * 0.5;
+      const distToCam = Math.max(2.0, camera.position.distanceTo(activeBh.position));
+      const apparentRadius = (activeBh.userData.radius / distToCam) * 0.95;
+
+      lensingPostMat.uniforms.uBhScreenPos.value.set(bhScreenU, bhScreenV);
+      lensingPostMat.uniforms.uMouseUv.value.set(mouseUvX, mouseUvY);
+      lensingPostMat.uniforms.uDistortionStrength.value = distortionEnabled ? 1.0 : 0.0;
+      lensingPostMat.uniforms.uDangerLevel.value = dangerLevel;
+      lensingPostMat.uniforms.uScreenRadius.value = apparentRadius;
+      lensingPostMat.uniforms.uTime.value = now * 0.001;
+
+      lensedStarMat.uniforms.uBhWorldPos.value.copy(activeBh.position);
+      lensedStarMat.uniforms.uEinsteinRadius.value = activeBh.userData.radius * (1.35 + dangerLevel * 1.4);
+
+      bhGroups.forEach((g, idx) => {
+        g.userData.diskMat.uniforms.uTime.value = shipProperTime * 1.4 + idx * 3.0;
+        g.userData.diskMat.uniforms.uRedshiftFactor.value = dangerLevel;
+
+        g.userData.gridMat.uniforms.uTime.value = now * 0.001;
+        g.userData.gridMat.uniforms.uMassWell.value = g.userData.baseMassWell * (1 + dangerLevel * 0.85);
+        g.userData.gridMat.uniforms.uMouseOffset.value.set(mouseX * 5.0, -mouseY * 5.0);
+
+        g.rotation.y = Math.sin(now * 0.00025 + idx) * 0.15;
+      });
+
+      // Render Scene to Offscreen Buffer, then Apply Gravitational Lensing Post-Pass
+      renderer.setRenderTarget(renderTarget);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      renderer.render(postScene, postCamera);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
