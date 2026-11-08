@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Face Expression & Emotion Tracker</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- face-api.js v0.22.2 -->
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    /* Mirror the webcam video and canvas overlay for natural user experience */
+    .mirror-view {
+      transform: scaleX(-1);
+    }
+    /* Smooth progress bar transitions */
+    .bar-fill {
+      transition: width 180ms ease-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-indigo-500/30">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-xl">
+          🎭
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white">Emotion Sense</h1>
+          <p class="text-xs text-slate-400">Real-time facial expression detection &amp; voice feedback</p>
+        </div>
+      </div>
+
+      <!-- Status Pill -->
+      <div class="flex items-center gap-2 self-start sm:self-auto">
+        <span id="status-badge" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+          <span id="status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="status-text">Loading AI Models...</span>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    
+    <!-- Error Banner (Hidden by default) -->
+    <div id="error-banner" class="hidden mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 flex items-start gap-3">
+      <svg class="w-5 h-5 text-rose-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <div class="flex-1">
+        <h3 class="text-sm font-semibold text-rose-300">Camera or Model Error</h3>
+        <p id="error-message" class="text-xs sm:text-sm text-rose-200/80 mt-0.5"></p>
+      </div>
+      <button id="dismiss-error" class="text-rose-300 hover:text-white text-xs font-medium px-2 py-1 rounded-lg hover:bg-rose-500/20 transition">
+        Dismiss
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      
+      <!-- Left Column: Video Feed & Controls (7 cols on lg) -->
+      <section class="lg:col-span-7 flex flex-col gap-4">
+        
+        <!-- Video Container -->
+        <div class="relative w-full aspect-video bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center">
+          
+          <!-- Webcam Video -->
+          <video id="webcam" class="w-full h-full object-cover mirror-view hidden" autoplay muted playsinline></video>
+          
+          <!-- Overlay Canvas -->
+          <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+
+          <!-- Placeholder / Camera Off State -->
+          <div id="camera-placeholder" class="flex flex-col items-center justify-center text-center p-6 max-w-sm">
+            <div class="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mb-4 text-slate-400">
+              <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 class="text-base font-semibold text-slate-200">Camera is Off</h2>
+            <p class="text-xs sm:text-sm text-slate-400 mt-1">
+              Click <span class="text-indigo-400 font-medium">Start Camera</span> below to begin real-time facial emotion detection.
+            </p>
+          </div>
+
+          <!-- Model Loading Overlay -->
+          <div id="loading-overlay" class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center z-20 p-6 text-center">
+            <div class="w-12 h-12 rounded-full border-4 border-slate-800 border-t-indigo-500 animate-spin mb-4"></div>
+            <p class="text-sm font-semibold text-white">Loading Face &amp; Emotion Models...</p>
+            <p class="text-xs text-slate-400 mt-1">Fetching TinyFaceDetector &amp; FaceExpressionNet weights</p>
+          </div>
+        </div>
+
+        <!-- Controls Bar -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+          
+          <div class="flex flex-wrap items-center gap-3">
+            <!-- Start / Stop Camera Button -->
+            <button id="toggle-camera-btn" disabled class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-500/20 transition active:scale-[0.98]">
+              <svg id="camera-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span id="toggle-camera-text">Start Camera</span>
+            </button>
+
+            <!-- Mute / Unmute Voice Button -->
+            <button id="toggle-voice-btn" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition active:scale-[0.98]">
+              <svg id="voice-on-icon" class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+              <svg id="voice-off-icon" class="w-4 h-4 text-rose-400 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+              </svg>
+              <span id="toggle-voice-text">Voice: On</span>
+            </button>
+          </div>
+
+          <!-- Voice Speed & Cooldown Indicator -->
+          <div class="flex items-center justify-between sm:justify-end gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+            <div class="flex items-center gap-2">
+              <label for="voice-speed" class="text-xs text-slate-400 font-medium whitespace-nowrap">Speed:</label>
+              <input id="voice-speed" type="range" min="0.7" max="1.5" step="0.1" value="1.0" class="w-20 accent-indigo-500 cursor-pointer" />
+              <span id="voice-speed-val" class="text-xs font-mono text-slate-300 w-8">1.0x</span>
+            </div>
+            <div class="text-xs text-slate-400 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
+              Cooldown: <span id="cooldown-status" class="text-emerald-400 font-medium">Ready</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Right Column: Dominant Emotion & Confidence Bars (5 cols on lg) -->
+      <aside class="lg:col-span-5 flex flex-col gap-4">
+        
+        <!-- Dominant Emotion Card -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Dominant Emotion</h2>
+            <span id="last-spoken-badge" class="text-[11px] text-slate-400 bg-slate-800/80 px-2.5 py-0.5 rounded-full">
+              Waiting for face...
+            </span>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <div id="dominant-emoji" class="w-16 h-16 rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-center text-4xl shadow-inner">
+              😐
+            </div>
+            <div class="flex-1 min-w-0">
+              <div id="dominant-label" class="text-2xl sm:text-3xl font-extrabold text-white capitalize truncate">
+                --
+              </div>
+              <div class="flex items-center gap-2 mt-1">
+                <span class="text-xs text-slate-400">Confidence:</span>
+                <span id="dominant-confidence" class="text-sm font-bold text-indigo-400 font-mono">0%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- All 7 Expressions Confidence Bars -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Expression Breakdown</h2>
+          <div id="expressions-list" class="space-y-3.5">
+            <!-- Populated dynamically by JavaScript -->
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+  </main>
+
+  <script>
+    // ==========================================
+    // Configuration & State
+    // ==========================================
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+    const SPEECH_COOLDOWN_MS = 2500; // 2.5 seconds smart debouncing
+
+    const EMOTION_META = {
+      happy:     { emoji: '😊', label: 'Happy',     color: 'bg-emerald-500', text: 'text-emerald-400' },
+      sad:       { emoji: '😢', label: 'Sad',       color: 'bg-blue-500',    text: 'text-blue-400' },
+      angry:     { emoji: '😠', label: 'Angry',     color: 'bg-rose-500',    text: 'text-rose-400' },
+      fearful:   { emoji: '😨', label: 'Fearful',   color: 'bg-purple-500',  text: 'text-purple-400' },
+      disgusted: { emoji: '🤢', label: 'Disgusted', color: 'bg-lime-500',    text: 'text-lime-400' },
+      surprised: { emoji: '😲', label: 'Surprised', color: 'bg-amber-500',   text: 'text-amber-400' },
+      neutral:   { emoji: '😐', label: 'Neutral',   color: 'bg-slate-400',   text: 'text-slate-300' }
+    };
+
+    let modelsLoaded = false;
+    let isCameraRunning = false;
+    let isVoiceEnabled = true;
+    let mediaStream = null;
+    let animationFrameId = null;
+
+    // Speech debouncing state
+    let lastSpokenEmotion = null;
+    let lastSpokenTime = 0;
+
+    // ==========================================
+    // DOM Elements
+    // ==========================================
+    const videoEl = document.getElementById('webcam');
+    const canvasEl = document.getElementById('overlay');
+    const cameraPlaceholder = document.getElementById('camera-placeholder');
+    const loadingOverlay = document.getElementById('loading-overlay');
+
+    const statusBadge = document.getElementById('status-badge');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
+    const errorBanner = document.getElementById('error-banner');
+    const errorMessage = document.getElementById('error-message');
+    const dismissErrorBtn = document.getElementById('dismiss-error');
+
+    const toggleCameraBtn = document.getElementById('toggle-camera-btn');
+    const toggleCameraText = document.getElementById('toggle-camera-text');
+    const toggleVoiceBtn = document.getElementById('toggle-voice-btn');
+    const toggleVoiceText = document.getElementById('toggle-voice-text');
+    const voiceOnIcon = document.getElementById('voice-on-icon');
+    const voiceOffIcon = document.getElementById('voice-off-icon');
+
+    const voiceSpeedInput = document.getElementById('voice-speed');
+    const voiceSpeedVal = document.getElementById('voice-speed-val');
+    const cooldownStatus = document.getElementById('cooldown-status');
+
+    const dominantEmoji = document.getElementById('dominant-emoji');
+    const dominantLabel = document.getElementById('dominant-label');
+    const dominantConfidence = document.getElementById('dominant-confidence');
+    const lastSpokenBadge = document.getElementById('last-spoken-badge');
+    const expressionsList = document.getElementById('expressions-list');
+
+    // ==========================================
+    // Initialization
+    // ==========================================
+    function initExpressionBars() {
+      expressionsList.innerHTML = Object.entries(EMOTION_META).map(([key, meta]) => `
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span class="flex items-center gap-1.5 font-medium text-slate-200">
+              <span>${meta.emoji}</span>
+              <span>${meta.label}</span>
+            </span>
+            <span id="pct-${key}" class="font-mono text-slate-400">0%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div id="bar-${key}" class="bar-fill h-full ${meta.color} rounded-full" style="width: 0%"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadModels() {
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+        ]);
+        modelsLoaded = true;
+        loadingOverlay.classList.add('hidden');
+        toggleCameraBtn.disabled = false;
+        setStatus('ready', 'Models Ready');
+      } catch (err) {
+        console.error('Model loading error:', err);
+        loadingOverlay.classList.add('hidden');
+        setStatus('error', 'Model Load Failed');
+        showError('Failed to load face-api.js models. Please check your internet connection and refresh the page.');
+      }
+    }
+
+    // ==========================================
+    // UI Helpers
+    // ==========================================
+    function setStatus(type, text) {
+      statusText.textContent = text;
+      statusBadge.className = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ';
+      statusDot.className = 'w-2 h-2 rounded-full ';
+
+      if (type === 'ready') {
+        statusBadge.className += 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
+        statusDot.className += 'bg-emerald-400';
+      } else if (type === 'active') {
+        statusBadge.className += 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20';
+        statusDot.className += 'bg-indigo-400 animate-pulse';
+      } else if (type === 'error') {
+        statusBadge.className += 'bg-rose-500/10 text-rose-300 border-rose-500/20';
+        statusDot.className += 'bg-rose-400';
+      } else {
+        statusBadge.className += 'bg-amber-500/10 text-amber-300 border-amber-500/20';
+        statusDot.className += 'bg-amber-400 animate-pulse';
+      }
+    }
+
+    function showError(msg) {
+      errorMessage.textContent = msg;
+      errorBanner.classList.remove('hidden');
+    }
+
+    function hideError() {
+      errorBanner.classList.add('hidden');
+    }
+
+    // ==========================================
+    // Camera Controls
+    // ==========================================
+    async function startCamera() {
+      if (!modelsLoaded) return;
+      hideError();
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+
+        videoEl.srcObject = mediaStream;
+        videoEl.classList.remove('hidden');
+        cameraPlaceholder.classList.add('hidden');
+
+        await videoEl.play();
+        isCameraRunning = true;
+
+        toggleCameraText.textContent = 'Stop Camera';
+        toggleCameraBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500', 'shadow-indigo-500/20');
+        toggleCameraBtn.classList.add('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-500/20');
+        setStatus('active', 'Detecting Live');
+
+        detectLoop();
+      } catch (err) {
+        console.error('Camera access error:', err);
+        setStatus('error', 'Camera Denied');
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          showError('Camera permission was denied. Please allow camera access in your browser settings and try again.');
+        } else if (err.name === 'NotFoundError') {
+          showError('No webcam was found on this device.');
+        } else {
+          showError(`Unable to access webcam: ${err.message}`);
+        }
+      }
+    }
+
+    function stopCamera() {
+      isCameraRunning = false;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+      videoEl.srcObject = null;
+      videoEl.classList.add('hidden');
+      cameraPlaceholder.classList.remove('hidden');
+
+      // Clear canvas
+      const ctx = canvasEl.getContext('2d');
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+      // Reset UI
+      toggleCameraText.textContent = 'Start Camera';
+      toggleCameraBtn.classList.remove('bg-rose-600', 'hover:bg-rose-500', 'shadow-rose-500/20');
+      toggleCameraBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-500', 'shadow-indigo-500/20');
+      setStatus('ready', 'Models Ready');
+      lastSpokenBadge.textContent = 'Camera stopped';
+    }
+
+    // ==========================================
+    // Real-Time Detection Loop
+    // ==========================================
+    async function detectLoop() {
+      if (!isCameraRunning) return;
+
+      if (videoEl.readyState === 4) {
+        const displaySize = {
+          width: videoEl.clientWidth,
+          height: videoEl.clientHeight
+        };
+
+        if (canvasEl.width !== displaySize.width || canvasEl.height !== displaySize.height) {
+          faceapi.matchDimensions(canvasEl, displaySize);
+        }
+
+        const detection = await faceapi
+          .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+          .withFaceExpressions();
+
+        const ctx = canvasEl.getContext('2d');
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+        if (detection) {
+          const resized = faceapi.resizeResults(detection, displaySize);
+          const { box } = resized.detection;
+
+          // Mirror X coordinate to match the mirrored video element
+          const mirroredX = displaySize.width - box.x - box.width;
+
+          // Find dominant emotion
+          const expressions = resized.expressions;
+          let dominant = 'neutral';
+          let maxScore = 0;
+
+          for (const [emotion, score] of Object.entries(expressions)) {
+            if (score > maxScore) {
+              maxScore = score;
+              dominant = emotion;
+            }
+          }
+
+          // Draw bounding box & label
+          drawBoundingBox(ctx, mirroredX, box.y, box.width, box.height, dominant, maxScore);
+
+          // Update dashboard bars & dominant card
+          updateDashboard(dominant, maxScore, expressions);
+
+          // Trigger Text-to-Speech with smart debouncing
+          handleSpeech(dominant);
+        } else {
+          lastSpokenBadge.textContent = 'No face detected';
+        }
+      }
+
+      // Update cooldown indicator
+      updateCooldownIndicator();
+
+      if (isCameraRunning) {
+        animationFrameId = requestAnimationFrame(detectLoop);
+      }
+    }
+
+    function drawBoundingBox(ctx, x, y, width, height, emotion, score) {
+      const meta = EMOTION_META[emotion] || EMOTION_META.neutral;
+      const pct = Math.round(score * 100);
+      const label = `${meta.emoji} ${meta.label} (${pct}%)`;
+
+      ctx.strokeStyle = '#6366f1'; // Indigo-500
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, 12);
+      ctx.stroke();
+
+      // Label background
+      ctx.font = '600 14px Inter, sans-serif';
+      const textWidth = ctx.measureText(label).width;
+      const pillWidth = textWidth + 20;
+      const pillHeight = 28;
+      const pillY = y > 34 ? y - 34 : y + 6;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(x, pillY, pillWidth, pillHeight, 8);
+      ctx.fill();
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillText(label, x + 10, pillY + 19);
+    }
+
+    function updateDashboard(dominant, maxScore, expressions) {
+      const meta = EMOTION_META[dominant] || EMOTION_META.neutral;
+      dominantEmoji.textContent = meta.emoji;
+      dominantLabel.textContent = meta.label;
+      dominantConfidence.textContent = `${Math.round(maxScore * 100)}%`;
+
+      for (const [key, score] of Object.entries(expressions)) {
+        const pct = Math.round(score * 100);
+        const barEl = document.getElementById(`bar-${key}`);
+        const pctEl = document.getElementById(`pct-${key}`);
+        if (barEl && pctEl) {
+          barEl.style.width = `${pct}%`;
+          pctEl.textContent = `${pct}%`;
+        }
+      }
+    }
+
+    // ==========================================
+    // Text-to-Speech with Smart Debouncing
+    // ==========================================
+    function handleSpeech(dominantEmotion) {
+      if (!isVoiceEnabled || !('speechSynthesis' in window)) return;
+
+      const now = Date.now();
+      const timeSinceLast = now - lastSpokenTime;
+
+      if (dominantEmotion !== lastSpokenEmotion && timeSinceLast >= SPEECH_COOLDOWN_MS) {
+        const meta = EMOTION_META[dominantEmotion];
+        if (!meta) return;
+
+        // Cancel any queued speech so it stays responsive
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(meta.label);
+        utterance.rate = parseFloat(voiceSpeedInput.value) || 1.0;
+        utterance.pitch = 1.0;
+
+        window.speechSynthesis.speak(utterance);
+
+        lastSpokenEmotion = dominantEmotion;
+        lastSpokenTime = now;
+        lastSpokenBadge.textContent = `Spoke: "${meta.label}"`;
+      }
+    }
+
+    function updateCooldownIndicator() {
+      const remaining = Math.max(0, SPEECH_COOLDOWN_MS - (Date.now() - lastSpokenTime));
+      if (remaining === 0) {
+        cooldownStatus.textContent = 'Ready';
+        cooldownStatus.className = 'text-emerald-400 font-medium';
+      } else {
+        cooldownStatus.textContent = `${(remaining / 1000).toFixed(1)}s`;
+        cooldownStatus.className = 'text-amber-400 font-mono';
+      }
+    }
+
+    // ==========================================
+    // Event Listeners
+    // ==========================================
+    toggleCameraBtn.addEventListener('click', () => {
+      if (isCameraRunning) {
+        stopCamera();
+      } else {
+        startCamera();
+      }
+    });
+
+    toggleVoiceBtn.addEventListener('click', () => {
+      isVoiceEnabled = !isVoiceEnabled;
+      if (isVoiceEnabled) {
+        toggleVoiceText.textContent = 'Voice: On';
+        voiceOnIcon.classList.remove('hidden');
+        voiceOffIcon.classList.add('hidden');
+      } else {
+        toggleVoiceText.textContent = 'Voice: Muted';
+        voiceOnIcon.classList.add('hidden');
+        voiceOffIcon.classList.remove('hidden');
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      }
+    });
+
+    voiceSpeedInput.addEventListener('input', (e) => {
+      voiceSpeedVal.textContent = `${parseFloat(e.target.value).toFixed(1)}x`;
+    });
+
+    dismissErrorBtn.addEventListener('click', hideError);
+
+    // Boot
+    window.addEventListener('DOMContentLoaded', () => {
+      initExpressionBars();
+      loadModels();
+    });
+  </script>
+</body>
+</html>
